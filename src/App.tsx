@@ -60,7 +60,8 @@ export default function App() {
   const requestRef = useRef<number>(0);
 
   const SHOPEE_ORANGE = "#EE4D2D";
-  const BGM_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"; // More stable public URL
+  // Using a more reliable, CORS-friendly music source
+  const BGM_URL = "https://assets.mixkit.co/music/preview/mixkit-happy-bells-loop-593.mp3"; 
 
   const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,7 +82,9 @@ export default function App() {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API Key não configurada. Adicione GEMINI_API_KEY no Vercel.");
+      const ai = new GoogleGenAI({ apiKey });
       
       let base64Data = "";
       let mimeType = "image/jpeg";
@@ -159,7 +162,9 @@ export default function App() {
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API Key não configurada.");
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: scriptToUse }] }],
