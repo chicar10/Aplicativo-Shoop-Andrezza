@@ -51,6 +51,7 @@ export default function App() {
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
+  const [videoExtension, setVideoExtension] = useState("webm");
   const [error, setError] = useState<string | null>(null);
   const [recordingProgress, setRecordingProgress] = useState(0);
   const [useBackgroundMusic, setUseBackgroundMusic] = useState(true);
@@ -101,12 +102,20 @@ export default function App() {
         // Extract frame from video
         const video = document.createElement('video');
         video.src = mediaSource.url;
-        video.crossOrigin = "anonymous";
-        await new Promise((resolve) => {
+        video.muted = true;
+        video.playsInline = true;
+        // Don't set crossOrigin for blob URLs as it can cause failures on mobile
+        if (!mediaSource.url.startsWith('blob:')) {
+          video.crossOrigin = "anonymous";
+        }
+        
+        await new Promise((resolve, reject) => {
           video.onloadeddata = () => {
-            video.currentTime = 1; // Seek to 1 second
+            video.currentTime = 0.5; // Seek to 0.5s for a good frame
           };
           video.onseeked = resolve;
+          video.onerror = () => reject(new Error("Erro ao carregar vídeo para análise."));
+          setTimeout(() => reject(new Error("Tempo esgotado ao processar vídeo.")), 10000);
         });
 
         const canvas = document.createElement('canvas');
@@ -273,17 +282,31 @@ export default function App() {
     ]);
 
     const getSupportedMimeType = () => {
-      const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
-      for (const type of types) if (MediaRecorder.isTypeSupported(type)) return type;
-      return '';
+      const types = [
+        'video/mp4', 
+        'video/webm;codecs=vp9,opus', 
+        'video/webm;codecs=vp8,opus', 
+        'video/webm'
+      ];
+      for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) return type;
+      }
+      return 'video/mp4'; // Fallback
     };
 
     const mimeType = getSupportedMimeType();
-    const recorder = new MediaRecorder(combinedStream, { mimeType });
+    const recorder = new MediaRecorder(combinedStream, { 
+      mimeType,
+      videoBitsPerSecond: 2500000 // 2.5 Mbps for mobile stability
+    });
 
     const chunks: Blob[] = [];
-    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
     recorder.onstop = () => {
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      setVideoExtension(ext);
       const blob = new Blob(chunks, { type: mimeType });
       setVideoBlobUrl(URL.createObjectURL(blob));
       setIsRecording(false);
@@ -577,7 +600,7 @@ export default function App() {
                               <video src={videoBlobUrl} controls className="w-full h-full rounded-xl object-cover shadow-lg" />
                               <a 
                                 href={videoBlobUrl} 
-                                download={`shopee-achadinho-${Date.now()}.webm`}
+                                download={`shopee-achadinho-${Date.now()}.${videoExtension}`}
                                 className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 hover:bg-emerald-600 transition-all active:scale-95 whitespace-nowrap"
                               >
                                 <Download size={18} />
