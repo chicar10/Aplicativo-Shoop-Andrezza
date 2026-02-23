@@ -60,7 +60,7 @@ export default function App() {
   const requestRef = useRef<number>(0);
 
   const SHOPEE_ORANGE = "#EE4D2D";
-  const BGM_URL = "https://cdn.pixabay.com/audio/2022/03/23/audio_07b667086a.mp3"; // Happy upbeat track
+  const BGM_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"; // More stable public URL
 
   const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,18 +83,35 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
       
-      let part;
+      let base64Data = "";
+      let mimeType = "image/jpeg";
+
       if (mediaSource.type === 'image') {
         const response = await fetch(mediaSource.url);
         const blob = await response.blob();
-        const base64Data = await new Promise<string>((resolve) => {
+        base64Data = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
           reader.readAsDataURL(blob);
         });
-        part = { inlineData: { mimeType: "image/jpeg", data: base64Data } };
       } else {
-        part = { text: "Analise este produto (vídeo enviado)." };
+        // Extract frame from video
+        const video = document.createElement('video');
+        video.src = mediaSource.url;
+        video.crossOrigin = "anonymous";
+        await new Promise((resolve) => {
+          video.onloadeddata = () => {
+            video.currentTime = 1; // Seek to 1 second
+          };
+          video.onseeked = resolve;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0);
+        base64Data = canvas.toDataURL('image/jpeg').split(',')[1];
       }
 
       const userContext = userProductDescription 
@@ -105,7 +122,7 @@ export default function App() {
         model: "gemini-3.1-pro-preview",
         contents: {
           parts: [
-            part,
+            { inlineData: { mimeType, data: base64Data } },
             {
               text: `Analise este produto da Shopee. ${userContext}
               Retorne um JSON com os seguintes campos:
@@ -124,12 +141,11 @@ export default function App() {
 
       const data = JSON.parse(response.text || "{}");
       setProductInfo(data);
-      // Initialize manual fields with auto-generated content as a starting point
       setManualHeadline(data.headline || "");
       setManualScript(data.script || "");
     } catch (err: any) {
-      console.error(err);
-      setError("Erro ao analisar o produto. Tente novamente.");
+      console.error("Analysis Error:", err);
+      setError(`Erro na análise: ${err.message || "Verifique sua GEMINI_API_KEY no Vercel."}`);
     } finally {
       setIsAnalyzing(false);
     }
